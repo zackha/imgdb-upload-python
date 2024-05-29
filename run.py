@@ -2,15 +2,17 @@ import os
 import requests
 from tqdm import tqdm
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-def list_images(directory):
-    extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp')
+def get_image_files(directory, extensions=('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+    """Returns a list of image file paths from the given directory and subdirectories."""
     return [os.path.join(root, file) 
             for root, _, files in os.walk(directory) 
             for file in files 
             if file.lower().endswith(extensions)]
 
-def upload_image(image_path, api_key):
+def upload_to_imgbb(image_path, api_key):
+    """Uploads an image to ImgBB and returns the JSON response or an error."""
     url = "https://api.imgbb.com/1/upload"
     try:
         with open(image_path, "rb") as file:
@@ -20,19 +22,30 @@ def upload_image(image_path, api_key):
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
-        return {"error": str(e)}
+        return {"error": str(e), "path": image_path}
 
-def process_images(directory, api_key):
-    image_paths = list_images(directory)
+def process_and_upload_images(directory, api_key, save_interval=10):
+    """Processes image files in the given directory and uploads them to ImgBB."""
+    image_paths = get_image_files(directory)
     results = []
+    
+    with ThreadPoolExecutor() as executor:
+        future_to_image = {executor.submit(upload_to_imgbb, path, api_key): path for path in image_paths}
+        
+        for i, future in enumerate(tqdm(as_completed(future_to_image), total=len(future_to_image), desc="Uploading images", unit="image"), 1):
+            result = future.result()
+            results.append(result)
+            if i % save_interval == 0:
+                save_results_to_excel(results)
+    
+    # Final save for any remaining results
+    save_results_to_excel(results)
 
-    for image_path in tqdm(image_paths, desc="Uploading images", unit="image"):
-        result = upload_image(image_path, api_key)
-        results.append(result)
-        # Save results to Excel after each upload
-        pd.json_normalize(results).to_excel("upload_results.xlsx", index=False)
+def save_results_to_excel(results):
+    """Saves the upload results to an Excel file."""
+    pd.json_normalize(results).to_excel("upload_results.xlsx", index=False)
 
 if __name__ == "__main__":
-    DIRECTORY = "/path/to/your/images"
-    API_KEY = "your_imgbb_api_key"
-    process_images(DIRECTORY, API_KEY)
+    DIRECTORY = "/Users/zackhatlen/Desktop/untitled/"
+    API_KEY = "1302a9f5290de71a20f0073755618cc9"
+    process_and_upload_images(DIRECTORY, API_KEY)
