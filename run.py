@@ -20,9 +20,9 @@ def upload_to_imgbb(image_path, api_key):
             params = {"key": api_key}
             response = requests.post(url, files=files, params=params)
         response.raise_for_status()
-        return response.json()
+        return {"filename": os.path.basename(image_path), "response": response.json()}
     except requests.RequestException as e:
-        return {"error": str(e), "path": image_path}
+        return {"filename": os.path.basename(image_path), "error": str(e)}
 
 def process_and_upload_images(directory, api_key, save_interval=10):
     """Processes image files in the given directory and uploads them to ImgBB."""
@@ -43,9 +43,10 @@ def process_and_upload_images(directory, api_key, save_interval=10):
 
 def save_results_to_excel(results):
     """Saves the upload results to an Excel file."""
-    pd.json_normalize(results).to_excel("upload_results.xlsx", index=False)
+    df = pd.json_normalize(results)
+    df.to_excel("upload_results.xlsx", index=False)
 
 if __name__ == "__main__":
-    DIRECTORY = "/Users/zackhatlen/Desktop/untitled/"
-    API_KEY = "1302a9f5290de71a20f0073755618cc9"
+    DIRECTORY = "/path/to/your/images"
+    API_KEY = "your_imgbb_api_key"
     process_and_upload_images(DIRECTORY, API_KEY)
